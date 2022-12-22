@@ -1,0 +1,2 @@
+[workspace]
+members = ["libfido2-sys", "fido2-rs"]
