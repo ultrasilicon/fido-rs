@@ -1,6 +1,6 @@
 # fido-rs
 
-libfido2 bindings for the Rust programming language.
+[libfido2](https://github.com/Yubico/libfido2) bindings for the Rust programming language.
 
 # Example
 
