@@ -151,7 +151,7 @@ impl CredentialRequestBuilder {
     /// Enable the CTAP 2.1 FIDO_EXT_MINPINLEN extension on cred and sets the expected minimum PIN length of cred to len.
     ///
     /// If len is zero, the FIDO_EXT_MINPINLEN extension is disabled on cred.
-    pub fn pin_minlen(self, len: usize) -> Result<Self> {
+    pub fn pin_min_len(self, len: usize) -> Result<Self> {
         unsafe {
             check(ffi::fido_cred_set_pin_minlen(self.0 .0.as_ptr(), len))?;
         }
@@ -163,8 +163,8 @@ impl CredentialRequestBuilder {
     ///
     /// At the moment, only the FIDO_CRED_PROT_UV_OPTIONAL, FIDO_CRED_PROT_UV_OPTIONAL_WITH_ID, and FIDO_CRED_PROT_UV_REQUIRED protections are supported.
     ///
-    /// See [Prot]
-    pub fn prot(self, prot: Prot) -> Result<Self> {
+    /// See [Protection]
+    pub fn protection(self, prot: Protection) -> Result<Self> {
         unsafe {
             check(ffi::fido_cred_set_prot(self.0 .0.as_ptr(), prot as i32))?;
         }
@@ -193,12 +193,12 @@ impl CredentialRequestBuilder {
     /// Sets the attestation statement format identifier of cred.
     ///
     /// Note that not all authenticators support FIDO2 and therefore may only be able to generate fido-u2f attestation statements.
-    pub fn fmt(self, fmt: Fmt) -> Result<Self> {
+    pub fn attestation_format(self, fmt: AttestationFormat) -> Result<Self> {
         let fmt = match fmt {
-            Fmt::Packed => CString::new("packet"),
-            Fmt::FidoU2f => CString::new("fido-u2f"),
-            Fmt::Tpm => CString::new("tpm"),
-            Fmt::None => CString::new("none"),
+            AttestationFormat::Packed => CString::new("packet"),
+            AttestationFormat::FidoU2f => CString::new("fido-u2f"),
+            AttestationFormat::Tpm => CString::new("tpm"),
+            AttestationFormat::None => CString::new("none"),
         };
         let fmt = fmt.unwrap();
 
@@ -242,7 +242,7 @@ impl Credential {
     /// the minimum PIN length of cred.
     ///
     /// Otherwise, returns zero.
-    pub fn pin_minlen(&self) -> usize {
+    pub fn pin_min_len(&self) -> usize {
         unsafe { ffi::fido_cred_pin_minlen(self.0.as_ptr()) }
     }
 
@@ -250,21 +250,21 @@ impl Credential {
     /// the protection of cred.
     ///
     /// Otherwise, returns [None]
-    pub fn prot(&self) -> Option<Prot> {
+    pub fn protection(&self) -> Option<Protection> {
         unsafe {
             let prot = ffi::fido_cred_prot(self.0.as_ptr());
 
             match prot {
-                ffi::FIDO_CRED_PROT_UV_OPTIONAL => Some(Prot::UvOptional),
-                ffi::FIDO_CRED_PROT_UV_OPTIONAL_WITH_ID => Some(Prot::UvOptionalWithId),
-                ffi::FIDO_CRED_PROT_UV_REQUIRED => Some(Prot::UvRequired),
+                ffi::FIDO_CRED_PROT_UV_OPTIONAL => Some(Protection::UvOptional),
+                ffi::FIDO_CRED_PROT_UV_OPTIONAL_WITH_ID => Some(Protection::UvOptionalWithId),
+                ffi::FIDO_CRED_PROT_UV_REQUIRED => Some(Protection::UvRequired),
                 _ => None,
             }
         }
     }
 
     /// Return the attestation statement format identifier of cred, or [None] if cred does not have a format set.
-    pub fn fmt(&self) -> Option<Fmt> {
+    pub fn attestation_format(&self) -> Option<AttestationFormat> {
         let fmt = unsafe { ffi::fido_cred_fmt(self.0.as_ptr()) };
 
         if fmt.is_null() {
@@ -273,10 +273,10 @@ impl Credential {
             let fmt = unsafe { CStr::from_ptr(fmt).to_str().expect("invalid utf8") };
 
             match fmt {
-                "packet" => Some(Fmt::Packed),
-                "fido-u2f" => Some(Fmt::FidoU2f),
-                "tpm" => Some(Fmt::Tpm),
-                "none" => Some(Fmt::None),
+                "packet" => Some(AttestationFormat::Packed),
+                "fido-u2f" => Some(AttestationFormat::FidoU2f),
+                "tpm" => Some(AttestationFormat::Tpm),
+                "none" => Some(AttestationFormat::None),
                 _ => None,
             }
         }
@@ -309,7 +309,7 @@ impl Credential {
     /// Return CBOR-encoded authenticator data.
     ///
     /// The slice len will be 0 if is not set.
-    pub fn authdata(&self) -> &[u8] {
+    pub fn auth_data(&self) -> &[u8] {
         let len = unsafe { ffi::fido_cred_authdata_len(self.0.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_authdata_ptr(self.0.as_ptr()) };
 
@@ -319,7 +319,7 @@ impl Credential {
     /// Return raw authenticator data.
     ///
     /// The slice len will be 0 if is not set.
-    pub fn authdata_raw(&self) -> &[u8] {
+    pub fn auth_data_raw(&self) -> &[u8] {
         let len = unsafe { ffi::fido_cred_authdata_raw_len(self.0.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_authdata_raw_ptr(self.0.as_ptr()) };
 
@@ -329,7 +329,7 @@ impl Credential {
     /// Return client data hash
     ///
     /// The slice len will be 0 if is not set.
-    pub fn clientdata_hash(&self) -> &[u8] {
+    pub fn client_data_hash(&self) -> &[u8] {
         let len = unsafe { ffi::fido_cred_clientdata_hash_len(self.0.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_clientdata_hash_ptr(self.0.as_ptr()) };
 
@@ -349,7 +349,7 @@ impl Credential {
     /// Return authenticator attestation GUID
     ///
     /// The slice len will be 0 if is not set.
-    pub fn aaguid(&self) -> &[u8] {
+    pub fn attestation_guid(&self) -> &[u8] {
         let len = unsafe { ffi::fido_cred_aaguid_len(self.0.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_aaguid_ptr(self.0.as_ptr()) };
 
@@ -359,7 +359,7 @@ impl Credential {
     /// Return "largeBlobKey".
     ///
     /// The slice len will be 0 if is not set.
-    pub fn largeblob_key(&self) -> &[u8] {
+    pub fn large_blob_key(&self) -> &[u8] {
         let len = unsafe { ffi::fido_cred_largeblob_key_len(self.0.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_largeblob_key_ptr(self.0.as_ptr()) };
 
@@ -399,7 +399,7 @@ impl Credential {
     /// Return X509 certificate.
     ///
     /// The slice len will be 0 if is not set.
-    pub fn x5c(&self) -> &[u8] {
+    pub fn certificate(&self) -> &[u8] {
         let len = unsafe { ffi::fido_cred_x5c_len(self.0.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_x5c_ptr(self.0.as_ptr()) };
 
@@ -409,7 +409,7 @@ impl Credential {
     /// Return attestation statement.
     ///
     /// The slice len will be 0 if is not set.
-    pub fn attstmt(&self) -> &[u8] {
+    pub fn attestation(&self) -> &[u8] {
         let len = unsafe { ffi::fido_cred_attstmt_len(self.0.as_ptr()) };
         let ptr = unsafe { ffi::fido_cred_attstmt_ptr(self.0.as_ptr()) };
 
@@ -478,7 +478,7 @@ pub enum Opt {
 
 #[derive(Copy, Clone, Debug)]
 #[repr(i32)]
-pub enum Prot {
+pub enum Protection {
     UvOptional = ffi::FIDO_CRED_PROT_UV_OPTIONAL,
     UvOptionalWithId = ffi::FIDO_CRED_PROT_UV_OPTIONAL_WITH_ID,
     UvRequired = ffi::FIDO_CRED_PROT_UV_REQUIRED,
@@ -486,7 +486,7 @@ pub enum Prot {
 
 /// Attestation statement format
 #[derive(Copy, Clone, Debug)]
-pub enum Fmt {
+pub enum AttestationFormat {
     Packed,
     FidoU2f,
     Tpm,
