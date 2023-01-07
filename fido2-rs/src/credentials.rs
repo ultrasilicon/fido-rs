@@ -7,227 +7,6 @@ use std::ptr::NonNull;
 /// FIDO credential
 pub struct Credential(pub(crate) NonNull<ffi::fido_cred_t>);
 
-/// Request to make FIDO credential
-pub struct CredentialRequest(pub(crate) Credential);
-
-/// Builder for [CredentialRequest]
-pub struct CredentialRequestBuilder(Credential);
-
-impl CredentialRequest {
-    /// Return a [CredentialRequestBuilder]
-    pub fn builder() -> CredentialRequestBuilder {
-        CredentialRequestBuilder::new()
-    }
-}
-
-impl CredentialRequestBuilder {
-    /// Return a [CredentialRequestBuilder]
-    pub fn new() -> Self {
-        unsafe {
-            let cred = ffi::fido_cred_new();
-
-            CredentialRequestBuilder(Credential(NonNull::new_unchecked(cred)))
-        }
-    }
-
-    /// Set the client data hash of cred by specifying the credential's unhashed client data.
-    ///
-    /// This is required by Windows Hello, which calculates the client data hash internally.
-    ///
-    /// For compatibility with Windows Hello, applications should use [CredentialRequestBuilder::client_data] instead of [CredentialRequestBuilder::client_data_hash]
-    pub fn client_data(self, data: impl AsRef<[u8]>) -> Result<Self> {
-        let data = data.as_ref();
-        unsafe {
-            check(ffi::fido_cred_set_clientdata(
-                self.0 .0.as_ptr(),
-                data.as_ptr(),
-                data.len(),
-            ))?;
-        }
-
-        Ok(self)
-    }
-
-    /// See [CredentialRequestBuilder::client_data]
-    pub fn client_data_hash(self, data: impl AsRef<[u8]>) -> Result<Self> {
-        let data = data.as_ref();
-        unsafe {
-            check(ffi::fido_cred_set_clientdata_hash(
-                self.0 .0.as_ptr(),
-                data.as_ptr(),
-                data.len(),
-            ))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Set the relying party id and name parameters of cred
-    pub fn rp(self, id: impl AsRef<str>, name: impl AsRef<str>) -> Result<Self> {
-        let id = CString::new(id.as_ref())?;
-        let name = CString::new(name.as_ref())?;
-
-        unsafe {
-            check(ffi::fido_cred_set_rp(
-                self.0 .0.as_ptr(),
-                id.as_ptr(),
-                name.as_ptr(),
-            ))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Sets the user attributes of cred.
-    ///
-    /// Previously set user attributes are flushed
-    pub fn user(
-        self,
-        id: impl AsRef<[u8]>,
-        name: impl AsRef<str>,
-        display_name: Option<&str>,
-        icon: Option<&str>,
-    ) -> Result<Self> {
-        let id = id.as_ref();
-        let name = CString::new(name.as_ref())?;
-        let display_name = display_name.map(CString::new).transpose()?;
-        let icon = icon.map(CString::new).transpose()?;
-
-        let display_name_ptr = match &display_name {
-            Some(it) => it.as_ptr(),
-            None => std::ptr::null(),
-        };
-
-        let icon_ptr = match &icon {
-            Some(it) => it.as_ptr(),
-            None => std::ptr::null(),
-        };
-
-        unsafe {
-            check(ffi::fido_cred_set_user(
-                self.0 .0.as_ptr(),
-                id.as_ptr(),
-                id.len(),
-                name.as_ptr(),
-                display_name_ptr,
-                icon_ptr,
-            ))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Sets the extensions of cred to the bitmask flags.
-    ///
-    /// Only the FIDO_EXT_CRED_BLOB, FIDO_EXT_CRED_PROTECT, FIDO_EXT_HMAC_SECRET,
-    /// FIDO_EXT_MINPINLEN, and FIDO_EXT_LARGEBLOB_KEY extensions are supported.
-    ///
-    /// See [Extensions]
-    pub fn extension(self, flags: Extensions) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_cred_set_extensions(
-                self.0 .0.as_ptr(),
-                flags.bits,
-            ))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Sets the “credBlob” to be stored with cred.
-    pub fn blob(self, data: impl AsRef<[u8]>) -> Result<Self> {
-        let data = data.as_ref();
-        unsafe {
-            check(ffi::fido_cred_set_blob(
-                self.0 .0.as_ptr(),
-                data.as_ptr(),
-                data.len(),
-            ))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Enable the CTAP 2.1 FIDO_EXT_MINPINLEN extension on cred and sets the expected minimum PIN length of cred to len.
-    ///
-    /// If len is zero, the FIDO_EXT_MINPINLEN extension is disabled on cred.
-    pub fn pin_min_len(self, len: usize) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_cred_set_pin_minlen(self.0 .0.as_ptr(), len))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Enables the CTAP 2.1 FIDO_EXT_CRED_PROTECT extension on cred and sets the protection of cred to the scalar prot.
-    ///
-    /// At the moment, only the FIDO_CRED_PROT_UV_OPTIONAL, FIDO_CRED_PROT_UV_OPTIONAL_WITH_ID, and FIDO_CRED_PROT_UV_REQUIRED protections are supported.
-    ///
-    /// See [Protection]
-    pub fn protection(self, prot: Protection) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_cred_set_prot(self.0 .0.as_ptr(), prot as i32))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Set the rk (resident/discoverable key) attribute of cred.
-    pub fn rk(self, rk: Opt) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_cred_set_rk(self.0 .0.as_ptr(), rk as _))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Set the uv (user verification) attribute of cred.
-    pub fn uv(self, uv: Opt) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_cred_set_uv(self.0 .0.as_ptr(), uv as _))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Sets the attestation statement format identifier of cred.
-    ///
-    /// Note that not all authenticators support FIDO2 and therefore may only be able to generate fido-u2f attestation statements.
-    pub fn attestation_format(self, fmt: AttestationFormat) -> Result<Self> {
-        let fmt = match fmt {
-            AttestationFormat::Packed => CString::new("packet"),
-            AttestationFormat::FidoU2f => CString::new("fido-u2f"),
-            AttestationFormat::Tpm => CString::new("tpm"),
-            AttestationFormat::None => CString::new("none"),
-        };
-        let fmt = fmt.unwrap();
-
-        unsafe {
-            check(ffi::fido_cred_set_fmt(self.0 .0.as_ptr(), fmt.as_ptr()))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Sets the type of cred.
-    ///
-    /// The type of a credential may only be set once.
-    ///
-    /// Note that not all authenticators support COSE_RS256, COSE_ES384, or COSE_EDDSA.
-    pub fn cose_type(self, ty: CoseType) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_cred_set_type(self.0 .0.as_ptr(), ty as i32))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Build a request.
-    pub fn build(self) -> CredentialRequest {
-        CredentialRequest(self.0)
-    }
-}
-
 impl Drop for Credential {
     fn drop(&mut self) {
         unsafe {
@@ -238,6 +17,14 @@ impl Drop for Credential {
 }
 
 impl Credential {
+    /// Create a new credential
+    pub fn new() -> Self {
+        unsafe {
+            let cred = ffi::fido_cred_new();
+
+            Credential(NonNull::new_unchecked(cred))
+        }
+    }
     /// If the CTAP 2.1 FIDO_EXT_MINPINLEN extension is enabled on cred, then this function returns
     /// the minimum PIN length of cred.
     ///
@@ -462,6 +249,195 @@ impl Credential {
     pub fn verify_self(&self) -> Result<()> {
         unsafe {
             check(ffi::fido_cred_verify_self(self.0.as_ptr()))?;
+        }
+
+        Ok(())
+    }
+
+    /// Set the client data hash of cred by specifying the credential's unhashed client data.
+    ///
+    /// This is required by Windows Hello, which calculates the client data hash internally.
+    ///
+    /// For compatibility with Windows Hello, applications should use [CredentialRequestBuilder::client_data] instead of [CredentialRequestBuilder::client_data_hash]
+    pub fn set_client_data(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
+        let data = data.as_ref();
+        unsafe {
+            check(ffi::fido_cred_set_clientdata(
+                self.0.as_ptr(),
+                data.as_ptr(),
+                data.len(),
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    /// See [CredentialRequestBuilder::client_data]
+    pub fn set_client_data_hash(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
+        let data = data.as_ref();
+        unsafe {
+            check(ffi::fido_cred_set_clientdata_hash(
+                self.0.as_ptr(),
+                data.as_ptr(),
+                data.len(),
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    /// Set the relying party id and name parameters of cred
+    pub fn set_rp(&mut self, id: impl AsRef<str>, name: impl AsRef<str>) -> Result<()> {
+        let id = CString::new(id.as_ref())?;
+        let name = CString::new(name.as_ref())?;
+
+        unsafe {
+            check(ffi::fido_cred_set_rp(
+                self.0.as_ptr(),
+                id.as_ptr(),
+                name.as_ptr(),
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    /// Sets the user attributes of cred.
+    ///
+    /// Previously set user attributes are flushed
+    pub fn set_user(
+        &mut self,
+        id: impl AsRef<[u8]>,
+        name: impl AsRef<str>,
+        display_name: Option<&str>,
+        icon: Option<&str>,
+    ) -> Result<()> {
+        let id = id.as_ref();
+        let name = CString::new(name.as_ref())?;
+        let display_name = display_name.map(CString::new).transpose()?;
+        let icon = icon.map(CString::new).transpose()?;
+
+        let display_name_ptr = match &display_name {
+            Some(it) => it.as_ptr(),
+            None => std::ptr::null(),
+        };
+
+        let icon_ptr = match &icon {
+            Some(it) => it.as_ptr(),
+            None => std::ptr::null(),
+        };
+
+        unsafe {
+            check(ffi::fido_cred_set_user(
+                self.0.as_ptr(),
+                id.as_ptr(),
+                id.len(),
+                name.as_ptr(),
+                display_name_ptr,
+                icon_ptr,
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    /// Sets the extensions of cred to the bitmask flags.
+    ///
+    /// Only the FIDO_EXT_CRED_BLOB, FIDO_EXT_CRED_PROTECT, FIDO_EXT_HMAC_SECRET,
+    /// FIDO_EXT_MINPINLEN, and FIDO_EXT_LARGEBLOB_KEY extensions are supported.
+    ///
+    /// See [Extensions]
+    pub fn set_extension(&mut self, flags: Extensions) -> Result<()> {
+        unsafe {
+            check(ffi::fido_cred_set_extensions(self.0.as_ptr(), flags.bits))?;
+        }
+
+        Ok(())
+    }
+
+    /// Sets the “credBlob” to be stored with cred.
+    pub fn set_blob(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
+        let data = data.as_ref();
+        unsafe {
+            check(ffi::fido_cred_set_blob(
+                self.0.as_ptr(),
+                data.as_ptr(),
+                data.len(),
+            ))?;
+        }
+
+        Ok(())
+    }
+
+    /// Enable the CTAP 2.1 FIDO_EXT_MINPINLEN extension on cred and sets the expected minimum PIN length of cred to len.
+    ///
+    /// If len is zero, the FIDO_EXT_MINPINLEN extension is disabled on cred.
+    pub fn set_pin_min_len(&mut self, len: usize) -> Result<()> {
+        unsafe {
+            check(ffi::fido_cred_set_pin_minlen(self.0.as_ptr(), len))?;
+        }
+
+        Ok(())
+    }
+
+    /// Enables the CTAP 2.1 FIDO_EXT_CRED_PROTECT extension on cred and sets the protection of cred to the scalar prot.
+    ///
+    /// At the moment, only the FIDO_CRED_PROT_UV_OPTIONAL, FIDO_CRED_PROT_UV_OPTIONAL_WITH_ID, and FIDO_CRED_PROT_UV_REQUIRED protections are supported.
+    ///
+    /// See [Protection]
+    pub fn set_protection(&mut self, prot: Protection) -> Result<()> {
+        unsafe {
+            check(ffi::fido_cred_set_prot(self.0.as_ptr(), prot as i32))?;
+        }
+
+        Ok(())
+    }
+
+    /// Set the rk (resident/discoverable key) attribute of cred.
+    pub fn set_rk(&mut self, rk: Opt) -> Result<()> {
+        unsafe {
+            check(ffi::fido_cred_set_rk(self.0.as_ptr(), rk as _))?;
+        }
+
+        Ok(())
+    }
+
+    /// Set the uv (user verification) attribute of cred.
+    pub fn set_uv(&mut self, uv: Opt) -> Result<()> {
+        unsafe {
+            check(ffi::fido_cred_set_uv(self.0.as_ptr(), uv as _))?;
+        }
+
+        Ok(())
+    }
+
+    /// Sets the attestation statement format identifier of cred.
+    ///
+    /// Note that not all authenticators support FIDO2 and therefore may only be able to generate fido-u2f attestation statements.
+    pub fn set_attestation_format(&mut self, fmt: AttestationFormat) -> Result<()> {
+        let fmt = match fmt {
+            AttestationFormat::Packed => CString::new("packet"),
+            AttestationFormat::FidoU2f => CString::new("fido-u2f"),
+            AttestationFormat::Tpm => CString::new("tpm"),
+            AttestationFormat::None => CString::new("none"),
+        };
+        let fmt = fmt.unwrap();
+
+        unsafe {
+            check(ffi::fido_cred_set_fmt(self.0.as_ptr(), fmt.as_ptr()))?;
+        }
+
+        Ok(())
+    }
+
+    /// Sets the type of cred.
+    ///
+    /// The `type` of a credential may only be set once.
+    ///
+    /// Note that not all authenticators support COSE_RS256, COSE_ES384, or COSE_EDDSA.
+    pub fn set_cose_type(&mut self, ty: CoseType) -> Result<()> {
+        unsafe {
+            check(ffi::fido_cred_set_type(self.0.as_ptr(), ty as i32))?;
         }
 
         Ok(())

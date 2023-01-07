@@ -1,6 +1,6 @@
 use crate::assertion::{AssertRequest, Assertions};
 use crate::cbor::CBORInfo;
-use crate::credentials::{Credential, CredentialRequest};
+use crate::credentials::Credential;
 use crate::error::Result;
 use crate::utils::check;
 use bitflags::bitflags;
@@ -275,23 +275,20 @@ impl Device {
     /// use fido2_rs::credentials::CoseType;
     ///
     /// fn main() -> anyhow::Result<()> {
+    ///     use fido2_rs::credentials::Credential;
     ///     let dev = Device::open("windows://hello").expect("unable open device");
-    ///     let request = CredentialRequestBuilder::new()
-    ///         .client_data(&[1, 2, 3, 4, 5, 6])?
-    ///         .rp("fido_rs", "fido example")?
-    ///         .user(&[1, 2, 3, 4, 5, 6], "alice", Some("alice"), None)?
-    ///         .cose_type(CoseType::RS256)?    // windows hello only support rs256
-    ///         .build();
-    ///     let cred = dev.make_credential(request, None)?;    // and not require pin..
+    ///     let mut cred = Credential::new();
+    ///     cred.set_client_data(&[1, 2, 3, 4, 5, 6])?;
+    ///     cred.set_rp("fido_rs", "fido example")?;
+    ///     cred.set_user(&[1, 2, 3, 4, 5, 6], "alice", Some("alice"), None)?;
+    ///     cred.set_cose_type(CoseType::RS256)?;
+    ///
+    ///     let _ = dev.make_credential(&mut cred, None)?;    // and not require pin..
     ///
     ///     Ok(())
     /// }
     /// ```
-    pub fn make_credential(
-        &self,
-        request: CredentialRequest,
-        pin: Option<&str>,
-    ) -> Result<Credential> {
+    pub fn make_credential(&self, credential: &mut Credential, pin: Option<&str>) -> Result<()> {
         let pin = pin.map(CString::new).transpose()?;
         let pin_ptr = match &pin {
             Some(pin) => pin.as_ptr(),
@@ -301,12 +298,12 @@ impl Device {
         unsafe {
             check(ffi::fido_dev_make_cred(
                 self.ptr.as_ptr(),
-                request.0 .0.as_ptr(),
+                credential.0.as_ptr(),
                 pin_ptr,
             ))?;
         }
 
-        Ok(request.0)
+        Ok(())
     }
 
     /// Obtains an assertion from a FIDO2 device.
