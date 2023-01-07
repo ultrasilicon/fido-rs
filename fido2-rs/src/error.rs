@@ -11,6 +11,9 @@ pub enum Error {
 
     #[error("{0}")]
     NulError(#[from] std::ffi::NulError),
+
+    #[error("openssl {0}")]
+    Openssl(#[from] openssl::error::ErrorStack),
 }
 
 /// Error from libfido2

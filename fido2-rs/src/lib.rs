@@ -78,3 +78,4 @@ mod cbor;
 pub mod credentials;
 pub mod device;
 pub mod error;
+mod key;
