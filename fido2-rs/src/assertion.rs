@@ -1,11 +1,120 @@
-use crate::credentials::{Extensions, Opt};
-use crate::error::Result;
+use crate::credentials::{CoseType, Opt};
+use crate::error::{FidoError, Result};
+use crate::key::{Eddsa, Rsa, ES256, ES384};
 use crate::utils::check;
+use ffi::FIDO_ERR_INVALID_ARGUMENT;
+use openssl::nid::Nid;
+use openssl::pkey::{Id, PKey, Public};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::ptr::NonNull;
 
-/// FIDO assertions, contains one or more assertion.
+macro_rules! impl_assertion_set {
+    ($ty:ty, $($f:tt).*) => {
+        impl $ty {
+            /// Set the client data hash of assert by specifying the assertion's unhashed client data.
+            ///
+            /// This is required by Windows Hello, which calculates the client data hash internally.
+            ///
+            /// For compatibility with Windows Hello, applications should use [AssertRequestBuilder::client_data]
+            /// instead of [AssertRequestBuilder::client_data_hash].
+            pub fn set_client_data(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
+                let data = data.as_ref();
+                unsafe {
+                    check(ffi::fido_assert_set_clientdata(
+                        self.$($f).*.as_ptr(),
+                        data.as_ptr(),
+                        data.len(),
+                    ))?;
+                }
+
+                Ok(())
+            }
+
+            /// See [AssertRequestBuilder::client_data]
+            pub fn set_client_data_hash(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
+                let data = data.as_ref();
+                unsafe {
+                    check(ffi::fido_assert_set_clientdata_hash(
+                        self.$($f).*.as_ptr(),
+                        data.as_ptr(),
+                        data.len(),
+                    ))?;
+                }
+
+                Ok(())
+            }
+
+            /// Set the relying party id of assert.
+            pub fn set_rp(&mut self, id: impl AsRef<str>) -> Result<()> {
+                let id = CString::new(id.as_ref())?;
+
+                unsafe {
+                    check(ffi::fido_assert_set_rp(self.$($f).*.as_ptr(), id.as_ptr()))?;
+                }
+
+                Ok(())
+            }
+
+            /// Set the up (user presence) attribute of assert.
+            ///
+            /// **Default to [Opt::Omit]**
+            pub fn set_up(&mut self, up: Opt) -> Result<()> {
+                unsafe {
+                    check(ffi::fido_assert_set_up(self.$($f).*.as_ptr(), up as _))?;
+                }
+
+                Ok(())
+            }
+
+            /// Set the uv (user verification) attribute of assert.
+            ///
+            /// **Default to [Opt::Omit]**
+            pub fn set_uv(&mut self, uv: Opt) -> Result<()> {
+                unsafe {
+                    check(ffi::fido_assert_set_uv(self.$($f).*.as_ptr(), uv as _))?;
+                }
+
+                Ok(())
+            }
+
+            /// Set the extensions of assert to the bitmask flags.
+            ///
+            /// At the moment, only the FIDO_EXT_CRED_BLOB, FIDO_EXT_HMAC_SECRET, and FIDO_EXT_LARGEBLOB_KEY extensions are supported.
+            pub fn set_extensions(&mut self, flags: crate::credentials::Extensions) -> Result<()> {
+                unsafe {
+                    check(ffi::fido_assert_set_extensions(
+                        self.$($f).*.as_ptr(),
+                        flags.bits(),
+                    ))?;
+                }
+
+                Ok(())
+            }
+
+            /// Allow a credential in a FIDO2 assertion.
+            ///
+            /// Add id to the list of credentials allowed in assert.
+            ///
+            /// If fails, the existing list of allowed credentials is preserved.
+            pub fn set_allow_credential(&mut self, id: impl AsRef<[u8]>) -> Result<()> {
+                let id = id.as_ref();
+
+                unsafe {
+                    check(ffi::fido_assert_allow_cred(
+                        self.$($f).*.as_ptr(),
+                        id.as_ptr(),
+                        id.len(),
+                    ))?;
+                }
+
+                Ok(())
+            }
+        }
+    };
+}
+
+/// FIDO assertions from device, contains one or more assertion.
 pub struct Assertions {
     pub(crate) ptr: NonNull<ffi::fido_assert_t>,
 }
@@ -20,130 +129,171 @@ pub struct Assertion<'a> {
 /// Request to get a assertion.
 pub struct AssertRequest(pub(crate) Assertions);
 
-/// Builder for [AssertRequest]
-pub struct AssertRequestBuilder(Assertions);
+impl_assertion_set!(AssertRequest, 0.ptr);
 
 impl AssertRequest {
-    /// Return a [AssertRequestBuilder]
-    pub fn builder() -> AssertRequestBuilder {
-        AssertRequestBuilder::new()
-    }
-}
-
-impl AssertRequestBuilder {
-    /// Return a [AssertRequestBuilder]
-    pub fn new() -> AssertRequestBuilder {
+    /// Return a [AssertRequest]
+    pub fn new() -> AssertRequest {
         unsafe {
             let assert = ffi::fido_assert_new();
 
-            AssertRequestBuilder(Assertions {
+            AssertRequest(Assertions {
+                ptr: NonNull::new_unchecked(assert),
+            })
+        }
+    }
+}
+
+/// helper for verify an exist single assertion
+pub struct AssertVerifier(Assertions);
+
+impl_assertion_set!(AssertVerifier, 0.ptr);
+
+impl AssertVerifier {
+    /// Return a [AssertVerifier] for verify.
+    pub fn new() -> AssertVerifier {
+        unsafe {
+            let assert = ffi::fido_assert_new();
+            ffi::fido_assert_set_count(assert, 1);
+
+            AssertVerifier(Assertions {
                 ptr: NonNull::new_unchecked(assert),
             })
         }
     }
 
-    /// Set the client data hash of assert by specifying the assertion's unhashed client data.
+    /// Set the authenticator data part of the statement.
     ///
-    /// This is required by Windows Hello, which calculates the client data hash internally.
+    /// A copy of data is made, and no references to the passed data are kept.
     ///
-    /// For compatibility with Windows Hello, applications should use [AssertRequestBuilder::client_data]
-    /// instead of [AssertRequestBuilder::client_data_hash].
-    pub fn client_data(self, data: impl AsRef<[u8]>) -> Result<Self> {
+    /// The authenticator data passed to [AssertVerifier::set_auth_data] must be a CBOR-encoded byte string,
+    /// as obtained from [Assertion::auth_data].
+    ///
+    /// Alternatively, a raw binary blob may be passed to [AssertVerifier::set_auth_data_raw]
+    pub fn set_auth_data(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
         let data = data.as_ref();
+
         unsafe {
-            check(ffi::fido_assert_set_clientdata(
+            check(ffi::fido_assert_set_authdata(
                 self.0.ptr.as_ptr(),
+                0,
                 data.as_ptr(),
                 data.len(),
             ))?;
         }
 
-        Ok(self)
+        Ok(())
     }
 
-    /// See [AssertRequestBuilder::client_data]
-    pub fn client_data_hash(self, data: impl AsRef<[u8]>) -> Result<Self> {
+    /// Set the raw binary authenticator data part of the statement.
+    pub fn set_auth_data_raw(&mut self, data: impl AsRef<[u8]>) -> Result<()> {
         let data = data.as_ref();
+
         unsafe {
-            check(ffi::fido_assert_set_clientdata_hash(
+            check(ffi::fido_assert_set_authdata_raw(
                 self.0.ptr.as_ptr(),
+                0,
                 data.as_ptr(),
                 data.len(),
             ))?;
         }
 
-        Ok(self)
+        Ok(())
     }
 
-    /// Set the relying party id of assert.
-    pub fn rp(self, id: impl AsRef<str>) -> Result<Self> {
-        let id = CString::new(id.as_ref())?;
+    /// Set the signature part of the statement.
+    pub fn set_signature(&mut self, signature: impl AsRef<[u8]>) -> Result<()> {
+        let signature = signature.as_ref();
 
         unsafe {
-            check(ffi::fido_assert_set_rp(self.0.ptr.as_ptr(), id.as_ptr()))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Set the up (user presence) attribute of assert.
-    ///
-    /// **Default to [Opt::Omit]**
-    pub fn up(self, up: Opt) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_assert_set_up(self.0.ptr.as_ptr(), up as _))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Set the uv (user verification) attribute of assert.
-    ///
-    /// **Default to [Opt::Omit]**
-    pub fn uv(self, uv: Opt) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_assert_set_uv(self.0.ptr.as_ptr(), uv as _))?;
-        }
-
-        Ok(self)
-    }
-
-    /// Set the extensions of assert to the bitmask flags.
-    ///
-    /// At the moment, only the FIDO_EXT_CRED_BLOB, FIDO_EXT_HMAC_SECRET, and FIDO_EXT_LARGEBLOB_KEY extensions are supported.
-    pub fn extensions(self, flags: Extensions) -> Result<Self> {
-        unsafe {
-            check(ffi::fido_assert_set_extensions(
+            check(ffi::fido_assert_set_sig(
                 self.0.ptr.as_ptr(),
-                flags.bits(),
+                0,
+                signature.as_ptr(),
+                signature.len(),
             ))?;
         }
 
-        Ok(self)
+        Ok(())
     }
 
-    /// Allow a credential in a FIDO2 assertion.
+    /// Verify whether the signature contained in statement of assert matches the parameters of the assertion.
     ///
-    /// Add id to the list of credentials allowed in assert.
+    /// And verify whether the client data hash, relying party ID, user presence and user verification
+    /// attributes of assert have been attested by the holder of the private counterpart of the public key.
     ///
-    /// If fails, the existing list of allowed credentials is preserved.
-    pub fn allow_credential(self, id: impl AsRef<[u8]>) -> Result<Self> {
-        let id = id.as_ref();
+    /// The `public_key` is a public key of type COSE_ES256, COSE_ES384, COSE_RS256, or COSE_EDDSA.
+    ///
+    /// # Return
+    /// On verify success, this method return Ok(()), otherwise return Err.
+    pub fn verify(&self, public_key: PKey<Public>) -> Result<()> {
+        match public_key.id() {
+            Id::ED25519 => {
+                let pk = Eddsa::try_from(public_key)?;
 
-        unsafe {
-            check(ffi::fido_assert_allow_cred(
-                self.0.ptr.as_ptr(),
-                id.as_ptr(),
-                id.len(),
-            ))?;
+                unsafe {
+                    check(ffi::fido_assert_verify(
+                        self.0.ptr.as_ptr(),
+                        0,
+                        CoseType::EDDSA as i32,
+                        pk.as_ptr().cast(),
+                    ))?;
+                }
+            }
+            Id::RSA => {
+                let pk = Rsa::try_from(public_key)?;
+
+                unsafe {
+                    check(ffi::fido_assert_verify(
+                        self.0.ptr.as_ptr(),
+                        0,
+                        CoseType::EDDSA as i32,
+                        pk.as_ptr().cast(),
+                    ))?;
+                }
+            }
+            Id::EC => {
+                let ec_key = public_key.ec_key()?;
+                let group = ec_key.group();
+                let curve = group
+                    .curve_name()
+                    .ok_or(FidoError::new(FIDO_ERR_INVALID_ARGUMENT))?;
+                match curve {
+                    Nid::X9_62_PRIME256V1 => {
+                        let pk = ES256::try_from(ec_key)?;
+
+                        unsafe {
+                            check(ffi::fido_assert_verify(
+                                self.0.ptr.as_ptr(),
+                                0,
+                                CoseType::ES256 as i32,
+                                pk.as_ptr().cast(),
+                            ))?;
+                        }
+                    }
+                    Nid::SECP384R1 => {
+                        let pk = ES384::try_from(ec_key)?;
+
+                        unsafe {
+                            check(ffi::fido_assert_verify(
+                                self.0.ptr.as_ptr(),
+                                0,
+                                CoseType::ES384 as i32,
+                                pk.as_ptr().cast(),
+                            ))?;
+                        }
+                    }
+                    _ => {
+                        return Err(FidoError::new(FIDO_ERR_INVALID_ARGUMENT))?;
+                    }
+                }
+            }
+            _ => {
+                return Err(FidoError::new(FIDO_ERR_INVALID_ARGUMENT))?;
+            }
         }
 
-        Ok(self)
-    }
-
-    /// Build a request.
-    pub fn build(self) -> AssertRequest {
-        AssertRequest(self.0)
+        Ok(())
     }
 }
 
@@ -189,7 +339,7 @@ impl Assertion<'_> {
     }
 
     /// Return CBOR-encoded authenticator data
-    pub fn authdata(&self) -> &[u8] {
+    pub fn auth_data(&self) -> &[u8] {
         let len = unsafe { ffi::fido_assert_authdata_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_authdata_ptr(self.ptr.as_ptr(), self.idx) };
 
@@ -197,7 +347,7 @@ impl Assertion<'_> {
     }
 
     /// Return client data hash.
-    pub fn clientdata_hash(&self) -> &[u8] {
+    pub fn client_data_hash(&self) -> &[u8] {
         let len = unsafe { ffi::fido_assert_clientdata_hash_len(self.ptr.as_ptr()) };
         let ptr = unsafe { ffi::fido_assert_clientdata_hash_ptr(self.ptr.as_ptr()) };
 
@@ -225,7 +375,7 @@ impl Assertion<'_> {
     }
 
     /// Return largeBlobKey attribute.
-    pub fn largeblob_key(&self) -> &[u8] {
+    pub fn large_blob_key(&self) -> &[u8] {
         let len = unsafe { ffi::fido_assert_largeblob_key_len(self.ptr.as_ptr(), self.idx) };
         let ptr = unsafe { ffi::fido_assert_largeblob_key_ptr(self.ptr.as_ptr(), self.idx) };
 

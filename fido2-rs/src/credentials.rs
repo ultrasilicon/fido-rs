@@ -469,6 +469,7 @@ pub enum AttestationFormat {
     None,
 }
 
+/// COSE Algorithms type
 #[repr(i32)]
 pub enum CoseType {
     ES256 = ffi::COSE_ES256,
@@ -494,6 +495,7 @@ impl TryFrom<i32> for CoseType {
 }
 
 bitflags! {
+    /// FIDO extensions
     pub struct Extensions: i32 {
         const CRED_BLOB = ffi::FIDO_EXT_CRED_BLOB;
         const CRED_PROTECT = ffi::FIDO_EXT_CRED_PROTECT;
