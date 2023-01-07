@@ -270,12 +270,11 @@ impl Device {
     ///
     /// # Example
     /// ```rust,no_run
-    /// use fido2_rs::credentials::CredentialRequestBuilder;
+    /// use fido2_rs::credentials::Credential;
     /// use fido2_rs::device::Device;
     /// use fido2_rs::credentials::CoseType;
     ///
     /// fn main() -> anyhow::Result<()> {
-    ///     use fido2_rs::credentials::Credential;
     ///     let dev = Device::open("windows://hello").expect("unable open device");
     ///     let mut cred = Credential::new();
     ///     cred.set_client_data(&[1, 2, 3, 4, 5, 6])?;
@@ -285,6 +284,7 @@ impl Device {
     ///
     ///     let _ = dev.make_credential(&mut cred, None)?;    // and not require pin..
     ///
+    ///     dbg!(cred.id());
     ///     Ok(())
     /// }
     /// ```
@@ -320,19 +320,19 @@ impl Device {
     ///
     /// # Example
     /// ```rust,no_run
-    /// use fido2_rs::assertion::AssertRequestBuilder;
+    /// use fido2_rs::assertion::AssertRequest;
     /// use fido2_rs::credentials::Opt;
     /// use fido2_rs::device::Device;
     ///
     /// fn main() -> anyhow::Result<()> {
     ///     let dev = Device::open("windows://hello")?;
-    ///     let request = AssertRequestBuilder::new()
-    ///         .rp("fido_rs")?
-    ///         .client_data(&[1, 2, 3, 4, 5, 6])?
-    ///         .uv(Opt::True)?
-    ///         .build();
+    ///     let mut request = AssertRequest::new();    ///
     ///
-    ///     dev.get_assertion(request, None)?;
+    ///     request.set_rp("fido_rs")?;
+    ///     request.set_client_data(&[1, 2, 3, 4, 5, 6])?;
+    ///     request.set_uv(Opt::True)?;
+    ///
+    ///     let _assertions = dev.get_assertion(request, None)?;
     ///     Ok(())
     /// }
     /// ```
