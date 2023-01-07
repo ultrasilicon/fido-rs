@@ -1,8 +1,13 @@
 [package]
 name = "fido2-rs"
 version = "0.1.0"
+authors = ["tyan boot <tyanboot@outlook.com>"]
+license = "MIT"
+description = "Rust bindings to Yubico fido2"
+repository = "https://github.com/tyan-boot/fido-rs"
+keywords = ["fido2", "webauthn"]
+categories = ["authentication", "api-bindings", "hardware-support"]
 edition = "2021"
-
 
 [dependencies]
 thiserror = "1.0.37"
