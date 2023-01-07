@@ -38,13 +38,11 @@
 //! ```rust,no_run
 //! use fido2_rs::device::DeviceList;
 //!
-//! fn main() {
-//!     let list = DeviceList::list_devices(4);
-//!
-//!     for dev in list {
-//!         println!("{:?}", dev.path);
-//!     }
+//! let list = DeviceList::list_devices(4);
+//! for dev in list {
+//!     println!("{:?}", dev.path);
 //! }
+//!
 //! ```
 //!
 //! ## Make a credential

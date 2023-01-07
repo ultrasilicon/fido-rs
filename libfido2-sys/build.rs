@@ -51,7 +51,7 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
-    if let Ok(_) = env::var("FIDO2_USE_PKG_CONFIG") {
+    if env::var("FIDO2_USE_PKG_CONFIG").is_ok() {
         find_pkg()?;
 
         return Ok(());
@@ -92,7 +92,7 @@ fn main() -> Result<()> {
 fn verify_sha256(content: &[u8]) -> bool {
     let sha256 = Sha256::digest(content);
 
-    &*sha256 == hex::decode(SHA256).unwrap()
+    *sha256 == hex::decode(SHA256).unwrap()
 }
 
 /// for windows and msvc, use pre-build

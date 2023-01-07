@@ -18,6 +18,7 @@ impl Drop for Credential {
 
 impl Credential {
     /// Create a new credential
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         unsafe {
             let cred = ffi::fido_cred_new();

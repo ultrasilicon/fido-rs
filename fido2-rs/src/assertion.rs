@@ -133,6 +133,7 @@ impl_assertion_set!(AssertRequest, 0.ptr);
 
 impl AssertRequest {
     /// Return a [AssertRequest]
+    #[allow(clippy::new_without_default)]
     pub fn new() -> AssertRequest {
         unsafe {
             let assert = ffi::fido_assert_new();
@@ -151,6 +152,7 @@ impl_assertion_set!(AssertVerifier, 0.ptr);
 
 impl AssertVerifier {
     /// Return a [AssertVerifier] for verify.
+    #[allow(clippy::new_without_default)]
     pub fn new() -> AssertVerifier {
         unsafe {
             let assert = ffi::fido_assert_new();
@@ -428,7 +430,7 @@ impl Assertions {
         let count = self.count();
 
         AssertionIter {
-            asserts: &self,
+            asserts: self,
             idx: 0,
             count,
         }
