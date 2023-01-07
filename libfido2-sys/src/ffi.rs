@@ -138,6 +138,24 @@ pub const FIDO_DEBUG: i32 = 1;
 pub const FIDO_DISABLE_U2F_FALLBACK: i32 = 2;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
+pub struct evp_pkey_st {
+    _unused: [u8; 0],
+}
+pub type EVP_PKEY = evp_pkey_st;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct rsa_st {
+    _unused: [u8; 0],
+}
+pub type RSA = rsa_st;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct ec_key_st {
+    _unused: [u8; 0],
+}
+pub type EC_KEY = ec_key_st;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
 pub struct fido_dev {
     _unused: [u8; 0],
 }
@@ -322,6 +340,12 @@ pub struct es256_pk {
     _unused: [u8; 0],
 }
 pub type es256_pk_t = es256_pk;
+#[repr(C)]
+#[derive(Debug, Copy, Clone)]
+pub struct es384_pk {
+    _unused: [u8; 0],
+}
+pub type es384_pk_t = es384_pk;
 #[repr(C)]
 #[derive(Debug, Copy, Clone)]
 pub struct rs256_pk {
@@ -771,5 +795,62 @@ extern "C" {
         arg2: *const ::std::os::raw::c_uchar,
         arg3: usize,
         arg4: *const ::std::os::raw::c_char,
+    ) -> ::std::os::raw::c_int;
+    pub fn rs256_pk_new() -> *mut rs256_pk_t;
+    pub fn rs256_pk_free(arg1: *mut *mut rs256_pk_t);
+    pub fn rs256_pk_to_EVP_PKEY(arg1: *const rs256_pk_t) -> *mut EVP_PKEY;
+    pub fn rs256_pk_from_EVP_PKEY(
+        arg1: *mut rs256_pk_t,
+        arg2: *const EVP_PKEY,
+    ) -> ::std::os::raw::c_int;
+    pub fn rs256_pk_from_RSA(arg1: *mut rs256_pk_t, arg2: *const RSA) -> ::std::os::raw::c_int;
+    pub fn rs256_pk_from_ptr(
+        arg1: *mut rs256_pk_t,
+        arg2: *const ::std::os::raw::c_void,
+        arg3: usize,
+    ) -> ::std::os::raw::c_int;
+    pub fn es256_pk_new() -> *mut es256_pk_t;
+    pub fn es256_pk_free(arg1: *mut *mut es256_pk_t);
+    pub fn es256_pk_to_EVP_PKEY(arg1: *const es256_pk_t) -> *mut EVP_PKEY;
+    pub fn es256_pk_from_EC_KEY(
+        arg1: *mut es256_pk_t,
+        arg2: *const EC_KEY,
+    ) -> ::std::os::raw::c_int;
+    pub fn es256_pk_from_EVP_PKEY(
+        arg1: *mut es256_pk_t,
+        arg2: *const EVP_PKEY,
+    ) -> ::std::os::raw::c_int;
+    pub fn es256_pk_from_ptr(
+        arg1: *mut es256_pk_t,
+        arg2: *const ::std::os::raw::c_void,
+        arg3: usize,
+    ) -> ::std::os::raw::c_int;
+    pub fn es384_pk_new() -> *mut es384_pk_t;
+    pub fn es384_pk_free(arg1: *mut *mut es384_pk_t);
+    pub fn es384_pk_to_EVP_PKEY(arg1: *const es384_pk_t) -> *mut EVP_PKEY;
+    pub fn es384_pk_from_EC_KEY(
+        arg1: *mut es384_pk_t,
+        arg2: *const EC_KEY,
+    ) -> ::std::os::raw::c_int;
+    pub fn es384_pk_from_EVP_PKEY(
+        arg1: *mut es384_pk_t,
+        arg2: *const EVP_PKEY,
+    ) -> ::std::os::raw::c_int;
+    pub fn es384_pk_from_ptr(
+        arg1: *mut es384_pk_t,
+        arg2: *const ::std::os::raw::c_void,
+        arg3: usize,
+    ) -> ::std::os::raw::c_int;
+    pub fn eddsa_pk_new() -> *mut eddsa_pk_t;
+    pub fn eddsa_pk_free(arg1: *mut *mut eddsa_pk_t);
+    pub fn eddsa_pk_to_EVP_PKEY(arg1: *const eddsa_pk_t) -> *mut EVP_PKEY;
+    pub fn eddsa_pk_from_EVP_PKEY(
+        arg1: *mut eddsa_pk_t,
+        arg2: *const EVP_PKEY,
+    ) -> ::std::os::raw::c_int;
+    pub fn eddsa_pk_from_ptr(
+        arg1: *mut eddsa_pk_t,
+        arg2: *const ::std::os::raw::c_void,
+        arg3: usize,
     ) -> ::std::os::raw::c_int;
 }
