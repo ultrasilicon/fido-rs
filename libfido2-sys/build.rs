@@ -41,10 +41,17 @@ fn main() -> Result<()> {
                 println!("cargo:rustc-link-lib=cbor");
                 println!("cargo:rustc-link-lib=zlib1");
                 println!("cargo:rustc-link-lib=crypto-49");
-            } else {
+            } else if #[cfg(target_os = "linux")] {
                 println!("cargo:rustc-link-lib=cbor");
                 println!("cargo:rustc-link-lib=z");
                 println!("cargo:rustc-link-lib=crypto");
+                println!("cargo:rustc-link-lib=pcsclite");
+                println!("cargo:rustc-link-lib=udev");
+            } else if #[cfg(target_os = "macos")] {
+                println!("cargo:rustc-link-lib=cbor");
+                println!("cargo:rustc-link-lib=z");
+                println!("cargo:rustc-link-lib=crypto");
+                println!("cargo:rustc-link-lib=pcsclite");
             }
         }
 
@@ -81,9 +88,10 @@ fn main() -> Result<()> {
             println!("cargo:rustc-link-lib=cbor");
             println!("cargo:rustc-link-lib=z");
             println!("cargo:rustc-link-lib=crypto");
+            println!("cargo:rustc-link-lib=udev");
+            println!("cargo:rustc-link-lib=pcsclite");
         }
     }
-
     println!("cargo:rustc-link-lib=static=fido2");
 
     Ok(())
@@ -172,7 +180,7 @@ fn build_lib() -> Result<PathBuf> {
 /// for other, mingw or linux, download source.
 #[cfg(not(target_env = "msvc"))]
 fn download_src() -> Result<()> {
-    fn extract_tar(content: &[u8], dst: impl AsRef<Path>) -> Result<()> {
+    fn extract_tar(content: &[u8], dst: impl AsRef<Path>, out_dir: &Path) -> Result<()> {
         let gz = flate2::read::GzDecoder::new(Cursor::new(content));
         let mut tar = tar::Archive::new(gz);
 
@@ -186,11 +194,13 @@ fn download_src() -> Result<()> {
     let filename = format!("libfido2-{VERSION}.tar.gz");
     let out_path = out_dir.join(&filename);
 
+    let mut archive: Vec<u8> = vec![];
+
     if out_path.exists() {
-        let archive = std::fs::read(&out_path).expect("read exist archive failed");
+        archive = std::fs::read(&out_path).expect("read exist archive failed");
 
         if verify_sha256(&archive) {
-            extract_tar(&archive, out_dir.join("libfido2"))?;
+            extract_tar(&archive, out_dir.join("libfido2"), out_dir)?;
 
             return Ok(());
         } else {
@@ -214,7 +224,7 @@ fn download_src() -> Result<()> {
         bail!("verify download {} failed", filename);
     }
 
-    extract_tar(&archive, out_dir.join("libfido2"))?;
+    extract_tar(&archive, out_dir.join("libfido2"), out_dir)?;
 
     Ok(())
 }
